@@ -1,0 +1,43 @@
+#!/usr/bin/perl -w
+#
+# cookie-sqlite-to-jar - Convert Firefox cookies to cookie.jar format
+#
+# Copyright (c) 2020 Gerben Vos. Permission to use, copy, modify, and/or
+# distribute this software for any purpose with or without fee is hereby
+# granted. This software is distributed without any warranty.
+#
+# Run without arguments for usage information.
+# Download any missing modules from http://www.cpan.org/ .
+# The cookie.sqlite file is located in your Firefox profile directory.
+
+use strict;
+use DBI;
+use HTTP::Cookies::Netscape;
+
+die "Usage: cookie-sqlite-to-jar cookie.sqlite cookie.jar" unless @ARGV >= 2;
+my $cj = get_cookies($ARGV[0]);
+$cj->save($ARGV[1]);
+exit;
+
+sub get_cookies {
+	my ($sqlitefile) = @_;
+	my $db = DBI->connect(
+		"dbi:SQLite:dbname=$sqlitefile", "", "", { RaiseError => 1 })
+		or die $DBI::errstr;
+	my $sql = "SELECT host, path, isSecure, expiry, name, value FROM moz_cookies";
+	my $sth = $db->prepare($sql);
+	my $rv = $sth->execute() or die $DBI::errstr;
+
+	if ($rv < 0) {
+	   print $DBI::errstr;
+	}
+
+	my $cj = HTTP::Cookies::Netscape->new;
+	while (my @row = $sth->fetchrow_array()) {
+		$cj->set_cookie(0, $row[4], $row[5],
+			$row[1], $row[0], undef, undef, $row[2],
+			$row[3], $row[3] eq "", { });
+	}
+	return $cj;
+}
+
